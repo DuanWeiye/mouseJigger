@@ -6,7 +6,7 @@
 设备会被电脑识别为一个普通的蓝牙鼠标（默认名称 `RAPOO BT MOUSE`），无需安装任何驱动或软件，
 真正做到「插上即用、对系统完全透明」。
 
-> ✅ **默认目标型号：[M5Stack ATOM Lite](https://docs.m5stack.com/zh_CN/core/atom_lite)**
+> ✅ **默认目标型号：[M5Stack ATOM Lite](https://docs.m5stack.com/zh_CN/core/ATOM%20Lite)**
 > 固件的引脚配置（板载 RGB LED 与正面按键）完全对应 ATOM Lite，**开箱即烧、无需任何改动或额外接线**。
 > 使用其它 ESP32 开发板时，请参考下文「[换用其它 ESP32 开发板](#️-换用其它-esp32-开发板需自行修改)」自行调整配置。
 
@@ -26,7 +26,7 @@
 
 ### 默认硬件：M5Stack ATOM Lite（开箱即用）
 
-[M5Stack ATOM Lite](https://docs.m5stack.com/zh_CN/core/atom_lite) 主控为 ESP32-PICO-D4，
+[M5Stack ATOM Lite](https://docs.m5stack.com/zh_CN/core/ATOM%20Lite) 主控为 ESP32-PICO-D4，
 自带本固件所需的全部外设，**无需任何额外接线或改代码**：
 
 - 1 颗板载 WS2812C RGB LED（GPIO27）
