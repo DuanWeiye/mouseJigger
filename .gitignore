@@ -1,0 +1,11 @@
+# Arduino 编译产物
+build/
+*.bin
+*.elf
+*.hex
+*.map
+
+# 编辑器/系统
+.vscode/
+.DS_Store
+*~
