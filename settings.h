@@ -77,3 +77,25 @@ inline void settingsClearWifi() {
   g.wifiPass[0] = 0;
   settingsSave();
 }
+
+// ── 配置页访问密码 ──────────────────────────────────────────────────────────
+// 单独存一个 NVS 键，不放进 Settings 结构，避免结构体大小变化导致旧设置失效。
+String g_adminPass = "";  // 空 = 不需要密码
+
+inline void adminLoad() {
+  mjPrefs.begin("mj", true);
+  g_adminPass = mjPrefs.getString("pass", "");
+  mjPrefs.end();
+}
+inline void adminSetPass(const String& p) {
+  g_adminPass = p;
+  mjPrefs.begin("mj", false);
+  mjPrefs.putString("pass", p);
+  mjPrefs.end();
+}
+inline void adminClearPass() {
+  g_adminPass = "";
+  mjPrefs.begin("mj", false);
+  mjPrefs.remove("pass");
+  mjPrefs.end();
+}

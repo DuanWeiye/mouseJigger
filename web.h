@@ -1,7 +1,7 @@
 // web.h — Web 服务器：配置页面(PROGMEM) + JSON API
 //
 // 同步 WebServer，loop() 里 handleClient()。未知路径返回首页以触发系统强制门户。
-// 所有页面资源内嵌固件，烧录无需上传文件系统。
+// 设了访问密码时，数据接口需带 X-Auth 头校验（页面 JS 会弹框要密码）。
 #pragma once
 #include <Arduino.h>
 #include <WebServer.h>
@@ -28,6 +28,14 @@ static String mjJsonEsc(const String& s) {
     else o += c;
   }
   return o;
+}
+
+// 鉴权：未设密码放行；设了密码则校验 X-Auth 头。失败回 401。
+static bool mjAuth() {
+  if (g_adminPass.length() == 0) return true;
+  if (mjServer.hasHeader("X-Auth") && mjServer.header("X-Auth") == g_adminPass) return true;
+  mjServer.send(401, "application/json", "{\"auth\":false}");
+  return false;
 }
 
 // ── 配置页面 ────────────────────────────────────────────────────────────────
@@ -57,7 +65,9 @@ ul.aps li:hover{background:#eff6ff}
 .cell{height:26px;border:1px solid #d1d5db;border-radius:3px;cursor:pointer;background:#fff;
   display:flex;align-items:center;justify-content:center;font-size:10px;color:#9ca3af;user-select:none}
 .cell.on{background:#2563eb;border-color:#2563eb;color:#fff}
+hr{border:0;border-top:1px solid #eef0f2;margin:14px 0}
 .muted{color:#9ca3af;font-size:12px}.ok{color:#16a34a}.err{color:#dc2626}
+a{color:#2563eb}
 </style></head><body><div class="wrap">
 <h1>🖱️ MouseJigger 配置</h1>
 
@@ -93,13 +103,32 @@ ul.aps li:hover{background:#eff6ff}
 
 <div class="row" style="margin-top:14px"><button onclick="saveSettings()">保存设置</button>
 <button class="sec" onclick="restoreDefaults()">恢复默认</button><span id="setmsg" class="muted"></span></div>
+
+<hr>
+<h2>访问密码</h2>
+<p class="muted">设置后每次进入本页都需输入密码；清除密码或长按设备重置后免密码。</p>
+<div class="row"><label>密码</label>
+  <input type="password" id="adminpw" placeholder="输入新密码">
+  <button class="mini" onclick="togPw()" title="显示/隐藏">👁</button>
+  <button onclick="setPass()">设置密码</button>
+  <button class="warn" onclick="clearPass()">清除密码</button>
+  <span id="pwmsg" class="muted"></span></div>
 </div>
 
-<p class="muted" style="text-align:center">MouseJigger · ESP32 BLE 鼠标随机移动器</p>
+<p class="muted" style="text-align:center">MouseJigger · <a href="https://github.com/DuanWeiye/mouseJigger" target="_blank" rel="noopener">github.com/DuanWeiye/mouseJigger</a></p>
 </div>
 <script>
 const $=id=>document.getElementById(id);
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+let PW='';
+// 带鉴权的 fetch：401 时弹框要密码并重试
+async function af(u,o={}){
+  o.headers=Object.assign({'X-Auth':PW},o.headers||{});
+  let r=await fetch(u,o);
+  if(r.status===401){PW=prompt('请输入访问密码')||'';o.headers['X-Auth']=PW;r=await fetch(u,o);
+    if(r.status===401){alert('密码错误');throw new Error('auth');}}
+  return r;}
+
 function buildGrid(id){let g=$(id);g.innerHTML='';
   for(let h=0;h<24;h++){let c=document.createElement('div');c.className='cell';c.dataset.i=h;
     c.textContent=h;c.title=h+':00 - '+(h+1)+':00';
@@ -110,16 +139,18 @@ function getGrid(id){let v=0;$(id).querySelectorAll('.cell').forEach(c=>{
   if(c.classList.contains('on'))v|=(1<<(+c.dataset.i));});return (v>>>0).toString(16).padStart(6,'0');}
 function fill(id,on){$(id).querySelectorAll('.cell').forEach(c=>c.classList.toggle('on',!!on));}
 function inv(id){$(id).querySelectorAll('.cell').forEach(c=>c.classList.toggle('on'));}
+function togPw(){let e=$('adminpw');e.type=e.type==='password'?'text':'password';}
 
-async function loadStatus(){let s=await(await fetch('/api/status')).json();
+async function loadStatus(){let s=await(await af('/api/status')).json();
   let ble=s.ble?'<span class="badge on">已连接</span>':'<span class="badge off">未连接</span>';
   let sta=s.sta.connected?`已连 <b>${esc(s.sta.ssid)}</b> <span class="muted">(${esc(s.sta.ip)})</span>`
     :'<span class="muted">未连接路由</span>';
   let ntp=s.ntp?'已同步':'<span class="muted">未同步</span>';
   let env='';
-  if(s.env.present){env=`<div class="grp">🌡️ <b>${s.env.temp.toFixed(1)}℃</b>　💧 <b>${s.env.hum.toFixed(1)}%</b>`+
-    (s.env.hasPressure?`　🔻 <b>${s.env.pressure.toFixed(0)} hPa</b>`:'')+
-    `　<span class="muted">${esc(s.env.model)}</span></div>`;}
+  if(s.env.present||s.env.hasPressure){let p=[];
+    if(s.env.present)p.push(`🌡️ <b>${s.env.temp.toFixed(1)}℃</b>`,`💧 <b>${s.env.hum.toFixed(1)}%</b>`);
+    if(s.env.hasPressure)p.push(`🔻 <b>${s.env.pressure.toFixed(0)} hPa</b>`);
+    env=`<div class="grp">${p.join('　')}　<span class="muted">${esc(s.env.model)}</span></div>`;}
   $('status').innerHTML=
     `<div class="grp">🖱️ 蓝牙：${ble}　<span class="muted">已配对主机 ${s.bond|0}</span></div>`+
     `<div class="grp">📶 热点 <b>${esc(s.ap.ssid)}</b> <span class="muted">(${esc(s.ap.ip)})</span>　｜　路由：${sta}</div>`+
@@ -129,11 +160,11 @@ async function loadStatus(){let s=await(await fetch('/api/status')).json();
     ?`当前已连接：<b>${esc(s.sta.ssid)}</b> (${esc(s.sta.ip)})`
     :'当前未连接到路由（仅热点）';}
 
-async function loadSettings(){let s=await(await fetch('/api/settings')).json();
+async function loadSettings(){let s=await(await af('/api/settings')).json();
   $('btName').value=s.btName;$('moveMin').value=s.moveMin;$('moveMax').value=s.moveMax;
   $('ampMin').value=s.ampMin;$('ampMax').value=s.ampMax;setGrid('wd',s.wd);setGrid('we',s.we);}
 async function scan(){$('scanmsg').textContent='扫描中…';
-  let a=await(await fetch('/api/scan')).json();$('scanmsg').textContent='';
+  let a=await(await af('/api/scan')).json();$('scanmsg').textContent='';
   let ul=$('aps');ul.innerHTML='';
   if(!a.length){let li=document.createElement('li');li.className='muted';li.textContent='未发现网络';ul.appendChild(li);return;}
   a.forEach(x=>{let li=document.createElement('li');
@@ -145,30 +176,37 @@ async function scan(){$('scanmsg').textContent='扫描中…';
 async function connect(){let ssid=$('ssid').value.trim();if(!ssid){alert('请填写 WiFi 名称');return;}
   $('wifimsg').textContent='连接中（约 10 秒）…';$('wifimsg').className='muted';
   let b=new URLSearchParams({ssid,pass:$('pass').value});
-  let j=await(await fetch('/api/connect',{method:'POST',body:b})).json();
+  let j=await(await af('/api/connect',{method:'POST',body:b})).json();
   if(j.ok)$('wifimsg').innerHTML=`<span class="ok">已连接！可改用 http://${esc(j.host)}/ 或 ${esc(j.ip)} 访问</span>`;
   else $('wifimsg').innerHTML='<span class="err">连接失败，请检查密码后重试</span>';
   loadStatus();}
 async function resetWifi(){if(!confirm('确定清除已保存的 WiFi 并重启？'))return;
-  await fetch('/api/resetwifi',{method:'POST'});
+  await af('/api/resetwifi',{method:'POST'});
   $('wifimsg').innerHTML='<span class="muted">已重置，正在重启…</span>';}
 async function saveSettings(){let b=new URLSearchParams({name:$('btName').value,
   moveMin:$('moveMin').value,moveMax:$('moveMax').value,ampMin:$('ampMin').value,ampMax:$('ampMax').value,
   wd:getGrid('wd'),we:getGrid('we')});
-  let j=await(await fetch('/api/settings',{method:'POST',body:b})).json();
+  let j=await(await af('/api/settings',{method:'POST',body:b})).json();
   $('setmsg').innerHTML=j.reboot?'<span class="ok">已保存，设备名已改，正在重启…</span>':'<span class="ok">已保存 ✓</span>';}
 async function restoreDefaults(){if(!confirm('恢复默认设置？(不影响 WiFi)'))return;
-  let j=await(await fetch('/api/defaults',{method:'POST'})).json();
+  let j=await(await af('/api/defaults',{method:'POST'})).json();
   await loadSettings();$('setmsg').innerHTML=j.reboot?'<span class="ok">已恢复，正在重启…</span>':'<span class="ok">已恢复默认 ✓</span>';}
+async function setPass(){let p=$('adminpw').value;if(!p){alert('请输入密码');return;}
+  await af('/api/setpass',{method:'POST',body:new URLSearchParams({pass:p})});
+  PW=p;$('pwmsg').innerHTML='<span class="ok">密码已设置 ✓</span>';}
+async function clearPass(){if(!confirm('清除访问密码？'))return;
+  await af('/api/clearpass',{method:'POST'});PW='';$('adminpw').value='';
+  $('pwmsg').innerHTML='<span class="ok">密码已清除 ✓</span>';}
 
-buildGrid('wd');buildGrid('we');loadStatus();loadSettings();
-setInterval(loadStatus,5000);
+buildGrid('wd');buildGrid('we');
+(async()=>{await loadStatus();await loadSettings();setInterval(loadStatus,5000);})();
 </script></body></html>)HTML";
 
 // ── API handlers ────────────────────────────────────────────────────────────
 static void apiIndex() { mjServer.send_P(200, "text/html", MJ_INDEX_HTML); }
 
 static void apiStatus() {
+  if (!mjAuth()) return;
   bool sta = netStaUp();
   String j = "{";
   j += "\"ble\":" + String(g_bleConnected ? "true" : "false") + ",";
@@ -180,18 +218,19 @@ static void apiStatus() {
   j += "\"ntp\":" + String(netTimeValid() ? "true" : "false") + ",";
   j += "\"time\":\"" + netNowString() + "\",";
   j += "\"env\":{\"present\":" + String(g_env.present ? "true" : "false");
+  j += ",\"hasPressure\":" + String(g_env.hasPressure ? "true" : "false");
   if (g_env.present) {
-    j += ",\"model\":\"" + String(g_env.model) + "\"";
     j += ",\"temp\":" + String(g_env.tempC, 1);
     j += ",\"hum\":" + String(g_env.hum, 1);
-    j += ",\"hasPressure\":" + String(g_env.hasPressure ? "true" : "false");
-    if (g_env.hasPressure) j += ",\"pressure\":" + String(g_env.pressure, 0);
   }
+  if (g_env.hasPressure) j += ",\"pressure\":" + String(g_env.pressure, 0);
+  if (g_env.present || g_env.hasPressure) j += ",\"model\":\"" + String(g_env.model) + "\"";
   j += "}}";
   mjServer.send(200, "application/json", j);
 }
 
 static void apiScan() {
+  if (!mjAuth()) return;
   int n = WiFi.scanNetworks();
   String j = "[";
   for (int i = 0; i < n; i++) {
@@ -206,6 +245,7 @@ static void apiScan() {
 }
 
 static void apiConnect() {
+  if (!mjAuth()) return;
   String ssid = mjServer.arg("ssid");
   String pass = mjServer.arg("pass");
   bool ok = netConnectTo(ssid.c_str(), pass.c_str());
@@ -216,6 +256,7 @@ static void apiConnect() {
 }
 
 static void apiResetWifi() {
+  if (!mjAuth()) return;
   mjServer.send(200, "application/json", "{\"ok\":true}");
   delay(300);
   settingsClearWifi();
@@ -223,6 +264,7 @@ static void apiResetWifi() {
 }
 
 static void apiGetSettings() {
+  if (!mjAuth()) return;
   char wd[16], we[16];
   snprintf(wd, sizeof(wd), "%06llx", (unsigned long long)(g.schedWeekday & MJ_SCHED_ALL));
   snprintf(we, sizeof(we), "%06llx", (unsigned long long)(g.schedWeekend & MJ_SCHED_ALL));
@@ -237,6 +279,7 @@ static void apiGetSettings() {
 }
 
 static void apiPostSettings() {
+  if (!mjAuth()) return;
   String oldName = String(g.btName);
   strncpy(g.btName, mjServer.arg("name").c_str(), sizeof(g.btName)); g.btName[sizeof(g.btName)-1] = 0;
   g.moveMinSec = mjServer.arg("moveMin").toInt();
@@ -252,6 +295,7 @@ static void apiPostSettings() {
 }
 
 static void apiDefaults() {
+  if (!mjAuth()) return;
   char ssid[33], pass[65];
   strncpy(ssid, g.wifiSsid, sizeof(ssid)); strncpy(pass, g.wifiPass, sizeof(pass));
   String oldName = String(g.btName);
@@ -263,7 +307,21 @@ static void apiDefaults() {
   if (reboot) g_needReboot = true;
 }
 
+static void apiSetPass() {
+  if (!mjAuth()) return;                 // 已设密码时需先验证旧密码
+  adminSetPass(mjServer.arg("pass"));
+  mjServer.send(200, "application/json", "{\"ok\":true}");
+}
+
+static void apiClearPass() {
+  if (!mjAuth()) return;
+  adminClearPass();
+  mjServer.send(200, "application/json", "{\"ok\":true}");
+}
+
 inline void webBegin() {
+  const char* hdrs[] = {"X-Auth"};
+  mjServer.collectHeaders(hdrs, 1);
   mjServer.on("/", apiIndex);
   mjServer.on("/api/status", apiStatus);
   mjServer.on("/api/scan", apiScan);
@@ -272,6 +330,8 @@ inline void webBegin() {
   mjServer.on("/api/settings", HTTP_GET, apiGetSettings);
   mjServer.on("/api/settings", HTTP_POST, apiPostSettings);
   mjServer.on("/api/defaults", HTTP_POST, apiDefaults);
+  mjServer.on("/api/setpass", HTTP_POST, apiSetPass);
+  mjServer.on("/api/clearpass", HTTP_POST, apiClearPass);
   mjServer.onNotFound(apiIndex);  // 强制门户：未知路径返回首页
   mjServer.begin();
 }

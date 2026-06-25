@@ -48,8 +48,9 @@ void setup() {
   FastLED.clear();
   FastLED.show();
 
-  // 4. 读取保存的设置（设备名/间隔/幅度/周计划/WiFi）
+  // 4. 读取保存的设置（设备名/间隔/幅度/周计划/WiFi）+ 访问密码
   settingsLoad();
+  adminLoad();
 
   // 5. 启动蓝牙鼠标（用设置里的设备名）
   bleMouse.begin(g.btName, "RAPOO", 100);
@@ -76,6 +77,7 @@ void clearPairingAndRestart() {
   delay(1000);
   NimbleMouse::clearBonds();   // 删除全部蓝牙配对
   settingsClearWifi();         // 清除 WiFi 凭据
+  adminClearPass();            // 清除访问密码
   ESP.restart();
 }
 
