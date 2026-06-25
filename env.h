@@ -14,10 +14,12 @@
 #define MJ_I2C_SCL 32   // ATOM Lite Grove SCL
 
 struct EnvData {
-  bool  present = false;   // 是否检测到温湿度传感器
-  char  model[12] = "";    // 传感器型号字符串
-  float tempC = 0;         // 温度(℃)
-  float hum   = 0;         // 相对湿度(%)
+  bool  present = false;     // 是否检测到温湿度传感器
+  char  model[12] = "";      // 传感器型号字符串
+  float tempC = 0;           // 温度(℃)
+  float hum   = 0;           // 相对湿度(%)
+  bool  hasPressure = false; // 是否带气压传感器(ENV II/III 的 BMP280/QMP6988)
+  float pressure = 0;        // 气压(hPa)
 };
 EnvData g_env;
 

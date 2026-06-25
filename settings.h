@@ -6,9 +6,9 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
-// 周计划：每天分 48 个半小时（0:00-0:30=bit0 ... 23:30-24:00=bit47）。
-// 低 48 位有效，bit=1 表示该时段「允许随机移动」。
-static const uint64_t MJ_SCHED_ALL = 0xFFFFFFFFFFFFULL;  // 48 位全 1
+// 周计划：每天分 24 格（每格 1 小时，0 点=bit0 ... 23 点=bit23）。
+// 低 24 位有效，bit=1 表示该小时「允许随机移动」。
+static const uint64_t MJ_SCHED_ALL = 0xFFFFFFULL;  // 24 位全 1
 
 struct Settings {
   char     btName[32];     // 蓝牙设备名
@@ -16,8 +16,8 @@ struct Settings {
   uint16_t moveMaxSec;     // 随机移动间隔上限（秒）
   uint8_t  ampMin;         // 随机移动幅度下限（像素）
   uint8_t  ampMax;         // 随机移动幅度上限（像素）
-  uint64_t schedWeekday;   // 工作日(周一~周五) 48 半小时位图
-  uint64_t schedWeekend;   // 周末(周六/周日) 48 半小时位图
+  uint64_t schedWeekday;   // 工作日(周一~周五) 24 小时位图(每位1小时)
+  uint64_t schedWeekend;   // 周末(周六/周日) 24 小时位图(每位1小时)
   char     wifiSsid[33];   // 目标 WiFi 名（空=未配置）
   char     wifiPass[65];   // 目标 WiFi 密码
 };

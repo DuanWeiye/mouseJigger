@@ -1,7 +1,7 @@
 // web.h — Web 服务器：配置页面(PROGMEM) + JSON API
 //
-// 同步 WebServer，loop() 里 handleClient()。AP 模式下未知路径返回首页以触发
-// 系统强制门户。所有页面资源内嵌固件，烧录无需上传文件系统。
+// 同步 WebServer，loop() 里 handleClient()。未知路径返回首页以触发系统强制门户。
+// 所有页面资源内嵌固件，烧录无需上传文件系统。
 #pragma once
 #include <Arduino.h>
 #include <WebServer.h>
@@ -46,25 +46,25 @@ input[type=text],input[type=password],input[type=number]{padding:8px;border:1px 
 input[type=number]{flex:none;width:96px}
 button{padding:8px 14px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-size:14px;cursor:pointer}
 button.sec{background:#6b7280}button.warn{background:#dc2626}button.mini{padding:4px 8px;font-size:12px;background:#9ca3af}
-.status{font-size:13px;line-height:1.7}.status b{color:#111827}
+.status .grp{padding:7px 0;border-top:1px solid #eef0f2;font-size:13px;line-height:1.6}
+.status .grp:first-child{border-top:0;padding-top:0}.status b{color:#111827}
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;color:#fff}
 .on{background:#16a34a}.off{background:#9ca3af}
 ul.aps{list-style:none;padding:0;margin:8px 0;max-height:170px;overflow:auto}
 ul.aps li{padding:8px;border:1px solid #e5e7eb;border-radius:8px;margin:4px 0;cursor:pointer;display:flex;justify-content:space-between}
 ul.aps li:hover{background:#eff6ff}
-.sched{overflow-x:auto}
-.grid{display:grid;grid-template-columns:64px repeat(48,14px);gap:1px;align-items:center;font-size:10px}
-.grid .hh{grid-column:span 2;text-align:left;color:#9ca3af}
-.cell{width:14px;height:18px;border:1px solid #e5e7eb;border-radius:2px;cursor:pointer;background:#fff}
-.cell.on{background:#2563eb;border-color:#2563eb}
+.grid{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;margin:4px 0}
+.cell{height:26px;border:1px solid #d1d5db;border-radius:3px;cursor:pointer;background:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:10px;color:#9ca3af;user-select:none}
+.cell.on{background:#2563eb;border-color:#2563eb;color:#fff}
 .muted{color:#9ca3af;font-size:12px}.ok{color:#16a34a}.err{color:#dc2626}
-.hide{display:none}
 </style></head><body><div class="wrap">
 <h1>🖱️ MouseJigger 配置</h1>
 
 <div class="card"><h2>状态</h2><div class="status" id="status">加载中…</div></div>
 
 <div class="card"><h2>WiFi</h2>
+<div class="muted" id="wifinow" style="margin-bottom:6px"></div>
 <div class="row"><button onclick="scan()">扫描 WiFi</button><span class="muted" id="scanmsg"></span></div>
 <ul class="aps" id="aps"></ul>
 <div class="row"><label>名称(SSID)</label><input type="text" id="ssid" placeholder="选择上方或手动输入"></div>
@@ -78,59 +78,62 @@ ul.aps li:hover{background:#eff6ff}
 <div class="row"><label>移动间隔(秒)</label>最短<input type="number" id="moveMin" min="5">最长<input type="number" id="moveMax" min="5"></div>
 <div class="row"><label>移动幅度(像素)</label>最小<input type="number" id="ampMin" min="1" max="100">最大<input type="number" id="ampMax" min="1" max="100"></div>
 
-<h2 style="margin-top:14px">周计划（勾选=该半小时允许移动）</h2>
-<p class="muted">需联网取得时间后生效；未联网时始终允许移动。</p>
-<div class="sched">
-  <div class="row" style="margin:2px 0"><label>工作日(一~五)</label>
-    <button class="mini" onclick="fill('wd',1)">全天</button>
-    <button class="mini" onclick="fill('wd',0)">清空</button>
-    <button class="mini" onclick="inv('wd')">反选</button></div>
-  <div class="grid" id="wd"></div>
-  <div class="row" style="margin:8px 0 2px"><label>周末(六/日)</label>
-    <button class="mini" onclick="fill('we',1)">全天</button>
-    <button class="mini" onclick="fill('we',0)">清空</button>
-    <button class="mini" onclick="inv('we')">反选</button></div>
-  <div class="grid" id="we"></div>
-</div>
+<h2 style="margin-top:14px">周计划（勾选=该小时允许移动）</h2>
+<p class="muted">每格 1 小时；需联网取得时间后生效，未联网时始终允许移动。</p>
+<div class="row" style="margin:2px 0"><label>工作日(一~五)</label>
+  <button class="mini" onclick="fill('wd',1)">全天</button>
+  <button class="mini" onclick="fill('wd',0)">清空</button>
+  <button class="mini" onclick="inv('wd')">反选</button></div>
+<div class="grid" id="wd"></div>
+<div class="row" style="margin:8px 0 2px"><label>周末(六/日)</label>
+  <button class="mini" onclick="fill('we',1)">全天</button>
+  <button class="mini" onclick="fill('we',0)">清空</button>
+  <button class="mini" onclick="inv('we')">反选</button></div>
+<div class="grid" id="we"></div>
+
 <div class="row" style="margin-top:14px"><button onclick="saveSettings()">保存设置</button>
 <button class="sec" onclick="restoreDefaults()">恢复默认</button><span id="setmsg" class="muted"></span></div>
 </div>
-
-<div class="card hide" id="envcard"><h2>温湿度</h2>
-<div class="status" id="env"></div></div>
 
 <p class="muted" style="text-align:center">MouseJigger · ESP32 BLE 鼠标随机移动器</p>
 </div>
 <script>
 const $=id=>document.getElementById(id);
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function hourScale(){let s='';for(let h=0;h<24;h++)s+=`<div class="hh">${h}</div>`;return s;}
-function buildGrid(id){let g=$(id);g.innerHTML='<div></div>'+hourScale();
-  for(let i=0;i<48;i++){let c=document.createElement('div');c.className='cell';c.dataset.i=i;
+function buildGrid(id){let g=$(id);g.innerHTML='';
+  for(let h=0;h<24;h++){let c=document.createElement('div');c.className='cell';c.dataset.i=h;
+    c.textContent=h;c.title=h+':00 - '+(h+1)+':00';
     c.onclick=()=>c.classList.toggle('on');g.appendChild(c);}}
-function setGrid(id,hex){let v=BigInt('0x'+(hex||'0'));
-  $(id).querySelectorAll('.cell').forEach(c=>{let i=BigInt(c.dataset.i);
-    c.classList.toggle('on',((v>>i)&1n)===1n);});}
-function getGrid(id){let v=0n;$(id).querySelectorAll('.cell').forEach(c=>{
-  if(c.classList.contains('on'))v|=(1n<<BigInt(c.dataset.i));});return v.toString(16).padStart(12,'0');}
+function setGrid(id,hex){let v=parseInt(hex||'0',16)||0;
+  $(id).querySelectorAll('.cell').forEach(c=>c.classList.toggle('on',((v>>(+c.dataset.i))&1)===1));}
+function getGrid(id){let v=0;$(id).querySelectorAll('.cell').forEach(c=>{
+  if(c.classList.contains('on'))v|=(1<<(+c.dataset.i));});return (v>>>0).toString(16).padStart(6,'0');}
 function fill(id,on){$(id).querySelectorAll('.cell').forEach(c=>c.classList.toggle('on',!!on));}
 function inv(id){$(id).querySelectorAll('.cell').forEach(c=>c.classList.toggle('on'));}
 
-async function loadStatus(){let r=await fetch('/api/status');let s=await r.json();
+async function loadStatus(){let s=await(await fetch('/api/status')).json();
   let ble=s.ble?'<span class="badge on">已连接</span>':'<span class="badge off">未连接</span>';
-  $('status').innerHTML=`蓝牙：${ble}（已配对 ${s.bond|0}）<br>`+
-    `网络：<b>${esc(s.mode)}</b>　SSID：<b>${esc(s.ssid)||'-'}</b><br>`+
-    `地址：<b>${esc(s.ip)}</b>　<span class="muted">http://${esc(s.host)}/</span><br>`+
-    `时间：<b>${esc(s.time)||'未同步'}</b>`;}
-async function loadEnv(){let r=await fetch('/api/env');let e=await r.json();
-  if(e.present){$('envcard').classList.remove('hide');
-    $('env').innerHTML=`型号：<b>${esc(e.model)}</b>　🌡️ <b>${e.temp.toFixed(1)}℃</b>　💧 <b>${e.hum.toFixed(1)}%</b>`;}
-  else $('envcard').classList.add('hide');}
-async function loadSettings(){let r=await fetch('/api/settings');let s=await r.json();
+  let sta=s.sta.connected?`已连 <b>${esc(s.sta.ssid)}</b> <span class="muted">(${esc(s.sta.ip)})</span>`
+    :'<span class="muted">未连接路由</span>';
+  let ntp=s.ntp?'已同步':'<span class="muted">未同步</span>';
+  let env='';
+  if(s.env.present){env=`<div class="grp">🌡️ <b>${s.env.temp.toFixed(1)}℃</b>　💧 <b>${s.env.hum.toFixed(1)}%</b>`+
+    (s.env.hasPressure?`　🔻 <b>${s.env.pressure.toFixed(0)} hPa</b>`:'')+
+    `　<span class="muted">${esc(s.env.model)}</span></div>`;}
+  $('status').innerHTML=
+    `<div class="grp">🖱️ 蓝牙：${ble}　<span class="muted">已配对主机 ${s.bond|0}</span></div>`+
+    `<div class="grp">📶 热点 <b>${esc(s.ap.ssid)}</b> <span class="muted">(${esc(s.ap.ip)})</span>　｜　路由：${sta}</div>`+
+    `<div class="grp">🕒 NTP ${ntp}　<b>${esc(s.time)||'--'}</b></div>`+
+    env;
+  $('wifinow').innerHTML=s.sta.connected
+    ?`当前已连接：<b>${esc(s.sta.ssid)}</b> (${esc(s.sta.ip)})`
+    :'当前未连接到路由（仅热点）';}
+
+async function loadSettings(){let s=await(await fetch('/api/settings')).json();
   $('btName').value=s.btName;$('moveMin').value=s.moveMin;$('moveMax').value=s.moveMax;
   $('ampMin').value=s.ampMin;$('ampMax').value=s.ampMax;setGrid('wd',s.wd);setGrid('we',s.we);}
 async function scan(){$('scanmsg').textContent='扫描中…';
-  let r=await fetch('/api/scan');let a=await r.json();$('scanmsg').textContent='';
+  let a=await(await fetch('/api/scan')).json();$('scanmsg').textContent='';
   let ul=$('aps');ul.innerHTML='';
   if(!a.length){let li=document.createElement('li');li.className='muted';li.textContent='未发现网络';ul.appendChild(li);return;}
   a.forEach(x=>{let li=document.createElement('li');
@@ -142,39 +145,49 @@ async function scan(){$('scanmsg').textContent='扫描中…';
 async function connect(){let ssid=$('ssid').value.trim();if(!ssid){alert('请填写 WiFi 名称');return;}
   $('wifimsg').textContent='连接中（约 10 秒）…';$('wifimsg').className='muted';
   let b=new URLSearchParams({ssid,pass:$('pass').value});
-  let r=await fetch('/api/connect',{method:'POST',body:b});let j=await r.json();
-  if(j.ok){$('wifimsg').innerHTML=`<span class="ok">已连接！可改用 http://${j.host}/ 或 ${j.ip} 访问</span>`;}
-  else{$('wifimsg').innerHTML='<span class="err">连接失败，请检查密码后重试</span>';}
+  let j=await(await fetch('/api/connect',{method:'POST',body:b})).json();
+  if(j.ok)$('wifimsg').innerHTML=`<span class="ok">已连接！可改用 http://${esc(j.host)}/ 或 ${esc(j.ip)} 访问</span>`;
+  else $('wifimsg').innerHTML='<span class="err">连接失败，请检查密码后重试</span>';
   loadStatus();}
 async function resetWifi(){if(!confirm('确定清除已保存的 WiFi 并重启？'))return;
   await fetch('/api/resetwifi',{method:'POST'});
-  $('wifimsg').innerHTML='<span class="muted">已重置，正在重启，请连接 MouseJigger 热点…</span>';}
+  $('wifimsg').innerHTML='<span class="muted">已重置，正在重启…</span>';}
 async function saveSettings(){let b=new URLSearchParams({name:$('btName').value,
   moveMin:$('moveMin').value,moveMax:$('moveMax').value,ampMin:$('ampMin').value,ampMax:$('ampMax').value,
   wd:getGrid('wd'),we:getGrid('we')});
-  let r=await fetch('/api/settings',{method:'POST',body:b});let j=await r.json();
+  let j=await(await fetch('/api/settings',{method:'POST',body:b})).json();
   $('setmsg').innerHTML=j.reboot?'<span class="ok">已保存，设备名已改，正在重启…</span>':'<span class="ok">已保存 ✓</span>';}
 async function restoreDefaults(){if(!confirm('恢复默认设置？(不影响 WiFi)'))return;
-  let r=await fetch('/api/defaults',{method:'POST'});let j=await r.json();
+  let j=await(await fetch('/api/defaults',{method:'POST'})).json();
   await loadSettings();$('setmsg').innerHTML=j.reboot?'<span class="ok">已恢复，正在重启…</span>':'<span class="ok">已恢复默认 ✓</span>';}
 
-buildGrid('wd');buildGrid('we');loadStatus();loadSettings();loadEnv();
-setInterval(loadStatus,5000);setInterval(loadEnv,60000);
+buildGrid('wd');buildGrid('we');loadStatus();loadSettings();
+setInterval(loadStatus,5000);
 </script></body></html>)HTML";
 
 // ── API handlers ────────────────────────────────────────────────────────────
 static void apiIndex() { mjServer.send_P(200, "text/html", MJ_INDEX_HTML); }
 
 static void apiStatus() {
-  String ip = g_apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+  bool sta = netStaUp();
   String j = "{";
-  j += "\"mode\":\"" + String(g_apMode ? "AP 配网" : "STA 已联网") + "\",";
-  j += "\"ssid\":\"" + mjJsonEsc(g_apMode ? String(MJ_AP_SSID) : String(g.wifiSsid)) + "\",";
-  j += "\"ip\":\"" + ip + "\",";
-  j += "\"host\":\"" MJ_HOSTNAME ".local\",";
   j += "\"ble\":" + String(g_bleConnected ? "true" : "false") + ",";
   j += "\"bond\":" + String(g_bleBond) + ",";
-  j += "\"time\":\"" + netNowString() + "\"}";
+  j += "\"ap\":{\"ssid\":\"" MJ_AP_SSID "\",\"ip\":\"" + WiFi.softAPIP().toString() + "\"},";
+  j += "\"sta\":{\"connected\":" + String(sta ? "true" : "false") + ",";
+  j += "\"ssid\":\"" + mjJsonEsc(g.wifiSsid) + "\",";
+  j += "\"ip\":\"" + (sta ? WiFi.localIP().toString() : String("")) + "\"},";
+  j += "\"ntp\":" + String(netTimeValid() ? "true" : "false") + ",";
+  j += "\"time\":\"" + netNowString() + "\",";
+  j += "\"env\":{\"present\":" + String(g_env.present ? "true" : "false");
+  if (g_env.present) {
+    j += ",\"model\":\"" + String(g_env.model) + "\"";
+    j += ",\"temp\":" + String(g_env.tempC, 1);
+    j += ",\"hum\":" + String(g_env.hum, 1);
+    j += ",\"hasPressure\":" + String(g_env.hasPressure ? "true" : "false");
+    if (g_env.hasPressure) j += ",\"pressure\":" + String(g_env.pressure, 0);
+  }
+  j += "}}";
   mjServer.send(200, "application/json", j);
 }
 
@@ -211,8 +224,8 @@ static void apiResetWifi() {
 
 static void apiGetSettings() {
   char wd[16], we[16];
-  snprintf(wd, sizeof(wd), "%012llx", (unsigned long long)g.schedWeekday);
-  snprintf(we, sizeof(we), "%012llx", (unsigned long long)g.schedWeekend);
+  snprintf(wd, sizeof(wd), "%06llx", (unsigned long long)(g.schedWeekday & MJ_SCHED_ALL));
+  snprintf(we, sizeof(we), "%06llx", (unsigned long long)(g.schedWeekend & MJ_SCHED_ALL));
   String j = "{";
   j += "\"btName\":\"" + mjJsonEsc(g.btName) + "\",";
   j += "\"moveMin\":" + String(g.moveMinSec) + ",";
@@ -239,7 +252,6 @@ static void apiPostSettings() {
 }
 
 static void apiDefaults() {
-  // 恢复默认但保留 WiFi 凭据
   char ssid[33], pass[65];
   strncpy(ssid, g.wifiSsid, sizeof(ssid)); strncpy(pass, g.wifiPass, sizeof(pass));
   String oldName = String(g.btName);
@@ -251,17 +263,6 @@ static void apiDefaults() {
   if (reboot) g_needReboot = true;
 }
 
-static void apiEnv() {
-  String j = "{\"present\":" + String(g_env.present ? "true" : "false");
-  if (g_env.present) {
-    j += ",\"model\":\"" + String(g_env.model) + "\"";
-    j += ",\"temp\":" + String(g_env.tempC, 1);
-    j += ",\"hum\":" + String(g_env.hum, 1);
-  }
-  j += "}";
-  mjServer.send(200, "application/json", j);
-}
-
 inline void webBegin() {
   mjServer.on("/", apiIndex);
   mjServer.on("/api/status", apiStatus);
@@ -271,9 +272,7 @@ inline void webBegin() {
   mjServer.on("/api/settings", HTTP_GET, apiGetSettings);
   mjServer.on("/api/settings", HTTP_POST, apiPostSettings);
   mjServer.on("/api/defaults", HTTP_POST, apiDefaults);
-  mjServer.on("/api/env", apiEnv);
-  // 强制门户：未知路径一律返回首页，触发系统「需要登录」弹窗
-  mjServer.onNotFound(apiIndex);
+  mjServer.onNotFound(apiIndex);  // 强制门户：未知路径返回首页
   mjServer.begin();
 }
 
