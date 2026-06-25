@@ -17,6 +17,9 @@ set -e
 # 工具链路径可用环境变量覆盖（默认适配标准 Arduino 1.8.19 安装）
 ARDUINO="${ARDUINO:-$HOME/Downloads/arduino-1.8.19/arduino}"
 ESPTOOL="${ESPTOOL:-$HOME/.arduino15/packages/m5stack/tools/esptool_py/4.5.1/esptool.py}"
+# 烧录波特率：这块 ATOM Lite 的 USB 串口芯片切换高速率(921600/460800)偶发丢数据，
+# 默认用稳妥的 115200（约 1 分钟）。网络好的板子可用 BAUD=921600 ./build.sh -f 提速。
+BAUD="${BAUD:-115200}"
 BOOT_APP0="${BOOT_APP0:-$HOME/.arduino15/packages/m5stack/hardware/esp32/2.1.4/tools/partitions/boot_app0.bin}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -90,7 +93,7 @@ if [[ -n "$FLASH_PORT" ]]; then
   python3 "$ESPTOOL" \
     --chip   esp32 \
     --port   "$FLASH_PORT" \
-    --baud   921600 \
+    --baud   "$BAUD" \
     --before default_reset \
     --after  hard_reset \
     write_flash -z \
