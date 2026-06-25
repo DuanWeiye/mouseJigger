@@ -1,20 +1,17 @@
 #include <Arduino.h>
-#include <BleMouse.h>
 #include <FastLED.h>
-#include <nvs_flash.h>
-#include <esp_gap_ble_api.h>
+#include "nimble_mouse.h"
 
-// --- 引脚定义 ---
-#define LED_PIN     27
-#define BUTTON_PIN  39
+// --- 引脚定义（M5Stack ATOM Lite）---
+#define LED_PIN     27   // 板载 WS2812 RGB LED
+#define BUTTON_PIN  39   // 正面按键（ATOM Lite 板载已带上拉）
 #define NUM_LEDS    1
 
 // --- FastLED 设置 ---
 CRGB leds[NUM_LEDS];
 
-// --- 蓝牙鼠标实例化 ---
-// 参数: 设备名, 制造商, 电池电量
-BleMouse bleMouse("RAPOO BT MOUSE", "RAPOO", 100);
+// --- 蓝牙鼠标实例（NimBLE）---
+NimbleMouse bleMouse;
 
 // --- 时间变量记录 ---
 unsigned long lastMoveTime = 0;
@@ -42,33 +39,27 @@ void setup() {
   FastLED.clear();
   FastLED.show();
 
-  // 4. 启动蓝牙鼠标
-  bleMouse.begin();
-  
-  // 5. 初始化随机种子
-  randomSeed(analogRead(32)); // 读取一个空引脚作为随机数种子
-  
+  // 4. 启动蓝牙鼠标 (设备名, 制造商, 电池电量)
+  bleMouse.begin("RAPOO BT MOUSE", "RAPOO", 100);
+
+  // 5. 初始化随机种子：用硬件真随机数 (WiFi/BT 开启后可用)，
+  //    不再占用 GPIO32，避免与 Grove I2C(SCL=G32) 冲突
+  randomSeed(esp_random());
+
   // 初始化首次移动的随机时间 (5-8分钟)
   // 5分钟 = 300,000 ms, 8分钟 = 480,000 ms
-  nextMoveInterval = random(300000, 480000); 
+  nextMoveInterval = random(300000, 480000);
 }
 
-// 检查是否有已保存的配对(Bonded)设备
-bool hasBondedDevice() {
-  return esp_ble_get_bond_device_num() > 0;
-}
-
-// 清除配对信息并重启
+// 长按按键 5 秒：清除配对信息并重启
 void clearPairingAndRestart() {
   Serial.println("Clearing pairing information...");
-  leds[0] = CRGB::Red; // 重置时闪烁红灯提示
+  leds[0] = CRGB::Red; // 重置时亮红灯提示
   FastLED.show();
   delay(1000);
-  
-  // 擦除 NVS 分区（保存了蓝牙配对信息）
-  nvs_flash_erase();
-  nvs_flash_init();
-  
+
+  NimbleMouse::clearBonds(); // 删除全部蓝牙配对
+
   Serial.println("Rebooting...");
   ESP.restart();
 }
@@ -101,7 +92,7 @@ void loop() {
       // 随机生成 X 和 Y 的移动像素 (2 到 5 像素)
       int moveX = random(2, 6);
       int moveY = random(2, 6);
-      
+
       // 随机决定方向 (正或负)
       if (random(0, 2) == 0) moveX = -moveX;
       if (random(0, 2) == 0) moveY = -moveY;
@@ -113,10 +104,10 @@ void loop() {
       lastMoveTime = currentMillis;
       nextMoveInterval = random(300000, 480000); // 再次生成 5-8 分钟的随机数
     }
-    
+
   } else {
     // 未连接状态，判断是否曾经配对过
-    if (hasBondedDevice()) {
+    if (NimbleMouse::bondCount() > 0) {
       // 状态 2：已配对但未连接 -> 蓝灯常亮
       leds[0] = CRGB::Blue;
       FastLED.show();
@@ -131,5 +122,5 @@ void loop() {
     }
   }
 
-  delay(10); 
+  delay(10);
 }
