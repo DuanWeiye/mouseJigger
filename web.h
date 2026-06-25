@@ -103,6 +103,7 @@ ul.aps li:hover{background:#eff6ff}
 </div>
 <script>
 const $=id=>document.getElementById(id);
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function hourScale(){let s='';for(let h=0;h<24;h++)s+=`<div class="hh">${h}</div>`;return s;}
 function buildGrid(id){let g=$(id);g.innerHTML='<div></div>'+hourScale();
   for(let i=0;i<48;i++){let c=document.createElement('div');c.className='cell';c.dataset.i=i;
@@ -117,22 +118,27 @@ function inv(id){$(id).querySelectorAll('.cell').forEach(c=>c.classList.toggle('
 
 async function loadStatus(){let r=await fetch('/api/status');let s=await r.json();
   let ble=s.ble?'<span class="badge on">已连接</span>':'<span class="badge off">未连接</span>';
-  $('status').innerHTML=`蓝牙：${ble}（已配对 ${s.bond}）<br>`+
-    `网络：<b>${s.mode}</b>　SSID：<b>${s.ssid||'-'}</b><br>`+
-    `地址：<b>${s.ip}</b>　<span class="muted">http://${s.host}/</span><br>`+
-    `时间：<b>${s.time||'未同步'}</b>`;}
+  $('status').innerHTML=`蓝牙：${ble}（已配对 ${s.bond|0}）<br>`+
+    `网络：<b>${esc(s.mode)}</b>　SSID：<b>${esc(s.ssid)||'-'}</b><br>`+
+    `地址：<b>${esc(s.ip)}</b>　<span class="muted">http://${esc(s.host)}/</span><br>`+
+    `时间：<b>${esc(s.time)||'未同步'}</b>`;}
 async function loadEnv(){let r=await fetch('/api/env');let e=await r.json();
   if(e.present){$('envcard').classList.remove('hide');
-    $('env').innerHTML=`型号：<b>${e.model}</b>　🌡️ <b>${e.temp.toFixed(1)}℃</b>　💧 <b>${e.hum.toFixed(1)}%</b>`;}
+    $('env').innerHTML=`型号：<b>${esc(e.model)}</b>　🌡️ <b>${e.temp.toFixed(1)}℃</b>　💧 <b>${e.hum.toFixed(1)}%</b>`;}
   else $('envcard').classList.add('hide');}
 async function loadSettings(){let r=await fetch('/api/settings');let s=await r.json();
   $('btName').value=s.btName;$('moveMin').value=s.moveMin;$('moveMax').value=s.moveMax;
   $('ampMin').value=s.ampMin;$('ampMax').value=s.ampMax;setGrid('wd',s.wd);setGrid('we',s.we);}
 async function scan(){$('scanmsg').textContent='扫描中…';
   let r=await fetch('/api/scan');let a=await r.json();$('scanmsg').textContent='';
-  $('aps').innerHTML=a.map(x=>`<li onclick="document.getElementById('ssid').value='${x.ssid.replace(/'/g,"")}'">`+
-    `<span>${x.ssid||'(隐藏)'} ${x.enc?'🔒':''}</span><span class="muted">${x.rssi}dBm</span></li>`).join('')
-    ||'<li class="muted">未发现网络</li>';}
+  let ul=$('aps');ul.innerHTML='';
+  if(!a.length){let li=document.createElement('li');li.className='muted';li.textContent='未发现网络';ul.appendChild(li);return;}
+  a.forEach(x=>{let li=document.createElement('li');
+    let s1=document.createElement('span');s1.textContent=(x.ssid||'(隐藏)')+(x.enc?' 🔒':'');
+    let s2=document.createElement('span');s2.className='muted';s2.textContent=x.rssi+'dBm';
+    li.appendChild(s1);li.appendChild(s2);
+    li.onclick=()=>{$('ssid').value=x.ssid;};   // 用 input.value 赋值，杜绝 HTML 注入
+    ul.appendChild(li);});}
 async function connect(){let ssid=$('ssid').value.trim();if(!ssid){alert('请填写 WiFi 名称');return;}
   $('wifimsg').textContent='连接中（约 10 秒）…';$('wifimsg').className='muted';
   let b=new URLSearchParams({ssid,pass:$('pass').value});
