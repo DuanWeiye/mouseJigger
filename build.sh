@@ -4,7 +4,7 @@
 # 用法:
 #   ./build.sh          # 仅编译
 #   ./build.sh -f       # 编译 + 烧录（整套镜像）到 ATOM Lite
-#   ./build.sh -w       # 仅烧录已编译的 mouseJigger.bin（不重新编译，app 分区）
+#   ./build.sh -w       # 不编译，直接烧录已有 mouseJigger.bin（整套镜像）
 #
 # 烧录目标写死为下面的 ATOM_DEV（by-id 路径，稳定不随枚举顺序变），从根上避免
 # 误刷到 /dev/ttyUSB0 上的其它板子。多带的端口参数会被忽略。
@@ -20,7 +20,13 @@ ESPTOOL="${ESPTOOL:-$HOME/.arduino15/packages/m5stack/tools/esptool_py/4.5.1/esp
 # 烧录波特率：这块 ATOM Lite 的 USB 串口芯片切换高速率(921600/460800)偶发丢数据，
 # 默认用稳妥的 115200（约 1 分钟）。网络好的板子可用 BAUD=921600 ./build.sh -f 提速。
 BAUD="${BAUD:-115200}"
-BOOT_APP0="${BOOT_APP0:-$HOME/.arduino15/packages/m5stack/hardware/esp32/2.1.4/tools/partitions/boot_app0.bin}"
+CORE_DIR="${CORE_DIR:-$HOME/.arduino15/packages/m5stack/hardware/esp32/2.1.4}"
+BOOT_APP0="${BOOT_APP0:-$CORE_DIR/tools/partitions/boot_app0.bin}"
+# -w（不编译）时用 core 自带的预编译 bootloader + 分区表模板现场生成镜像，
+# 这样即使板子上原来是别的分区布局（如 ESP-IDF 工程的 factory @0x20000）也能一次刷对。
+BOOTLOADER_ELF="${BOOTLOADER_ELF:-$CORE_DIR/tools/sdk/esp32/bin/bootloader_dio_80m.elf}"
+PART_CSV="${PART_CSV:-$CORE_DIR/tools/partitions/huge_app.csv}"
+GEN_PART="${GEN_PART:-$CORE_DIR/tools/gen_esp32part.py}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKETCH="$SCRIPT_DIR/mouseJigger.ino"
@@ -32,8 +38,9 @@ OUT_DIR="$SCRIPT_DIR"
 BIN_NAME="mouseJigger.bin"
 
 # ATOM Lite 稳定设备 ID（USB 串口 MAC 固定 → by-id 路径不随枚举顺序变）。
-# 刷机目标写死为它，避免误刷到 ttyUSB0 上的其它设备。
-ATOM_DEV="/dev/serial/by-id/usb-Hades2001_M5stack_6152BC0793-if00-port0"
+# 默认写死为在用的那块，避免误刷到 ttyUSB* 上的其它板子。
+# 换板/多块同款板时用 ATOM_DEV=/dev/serial/by-id/... 覆盖。
+ATOM_DEV="${ATOM_DEV:-/dev/serial/by-id/usb-Hades2001_M5stack_6552CC3093-if00-port0}"
 
 DO_BUILD=1        # -w 关掉它：跳过编译，直接刷已有 .bin
 FLASH_PORT=""
@@ -47,7 +54,7 @@ while [[ $# -gt 0 ]]; do
       echo "用法: $0 [-f] | [-w]"
       echo "  (无参数)  仅编译"
       echo "  -f        编译并烧录（整套镜像）到写死的 ATOM Lite"
-      echo "  -w        仅烧录已有 mouseJigger.bin（不编译，app @0x10000）"
+      echo "  -w        不编译，烧录已有 mouseJigger.bin（bootloader+分区表+app 整套）"
       exit 0 ;;
     *)
       if [[ "$1" == -* ]]; then echo "未知选项: $1"; exit 1; fi
@@ -85,9 +92,26 @@ if [[ -n "$FLASH_PORT" ]]; then
       0x10000 "$APP_BIN"
     )
   else
-    # 仅刷 app 分区（分区方案不变时够用）
-    echo "=== 仅烧录 app 分区 -> $FLASH_PORT ==="
-    WRITE_ARGS=( 0x10000 "$APP_BIN" )
+    # 不编译：用 core 现成件生成 bootloader / 分区表，同样刷整套。
+    # 只刷 app 会踩坑——板子上残留的分区表可能把 app 指到别的偏移，刷完直接 boot loop。
+    for f in "$BOOTLOADER_ELF" "$PART_CSV" "$GEN_PART" "$BOOT_APP0"; do
+      [[ -f "$f" ]] || { echo "ERROR: 缺少 core 文件 $f"; exit 1; }
+    done
+    BOOTLOADER_BIN="$BUILD_DIR/bootloader_dio_80m.bin"
+    PART_BIN="$BUILD_DIR/huge_app.partitions.bin"
+    echo "=== 生成 bootloader / 分区表（huge_app）==="
+    python3 "$ESPTOOL" --chip esp32 elf2image \
+      --flash_mode dio --flash_freq 80m --flash_size 4MB \
+      -o "$BOOTLOADER_BIN" "$BOOTLOADER_ELF"
+    python3 "$GEN_PART" -q "$PART_CSV" "$PART_BIN"
+
+    echo "=== 烧录整套镜像（未重新编译）-> $FLASH_PORT ==="
+    WRITE_ARGS=(
+      0x1000  "$BOOTLOADER_BIN"
+      0x8000  "$PART_BIN"
+      0xe000  "$BOOT_APP0"
+      0x10000 "$APP_BIN"
+    )
   fi
 
   python3 "$ESPTOOL" \
